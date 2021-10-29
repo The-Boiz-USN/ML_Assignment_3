@@ -5,6 +5,27 @@ import pandas as pd
 from pandas.plotting import scatter_matrix
 from sklearn.preprocessing import MinMaxScaler
 from sklearn import linear_model
+import pickle
+from keras import models, layers
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+
+
+def nan_helper(y):
+    """Helper to handle indices and logical indices of NaNs.
+
+    Input:
+        - y, 1d numpy array with possible NaNs
+    Output:
+        - nans, logical indices of NaNs
+        - index, a function, with signature indices= index(logical_indices),
+          to convert logical indices of NaNs to 'equivalent' indices
+    Example:
+        >>> # linear interpolation of NaNs
+        >>> nans, x= nan_helper(y)
+        >>> y[nans]= np.interp(x(nans), x(~nans), y[~nans])
+    """
+    return np.isnan(y), lambda z: z.nonzero()[0]
 
 
 def plot_temperature_data(run: int):
@@ -179,6 +200,61 @@ def get_dataframe(run: int) -> pd.DataFrame:
     return df
 
 
+def resize2(data, hz, shape=(2205, 6000)) -> np.ndarray:
+    ts = 100 // hz
+
+    tmp = np.empty(shape)
+    tmp[:] = np.nan
+    for i in range(shape[0]):
+        for j in range(shape[1]):
+            if j % ts == 0:
+                tmp[i, j] = data[i, j // ts]
+        nans, x = nan_helper(tmp[i])
+        tmp[i, nans] = np.interp(x(nans), x(~nans), tmp[i, ~nans])
+        tmp[i] = tmp[i] / max(tmp[i])
+    return tmp
+
+
+def get_dataframe2() -> np.ndarray:
+    ps1 = resize2(get_data("ps1"), 100)
+    ps2 = resize2(get_data("ps2"), 100)
+    ps3 = resize2(get_data("ps3"), 100)
+    # ps4 = get_data("ps4")[run, :]  # all values are 0
+    ps5 = resize2(get_data("ps5"), 100)
+    ps6 = resize2(get_data("ps6"), 100)
+    eps1 = resize2(get_data("eps1"), 100)
+    data100 = [ps1, ps2, ps3, ps5, ps6, eps1]
+    col100 = ["ps1", "ps2", "ps3", "ps5", "ps6", "eps1"]
+
+    fs1 = resize2(get_data("fs1"), 10)
+    fs2 = resize2(get_data("fs2"), 10)
+    data10 = [fs1, fs2]
+    col10 = ["fs1", "fs2"]
+
+    ts1 = resize2(get_data("ts1"), 1)
+    ts2 = resize2(get_data("ts2"), 1)
+    ts3 = resize2(get_data("ts3"), 1)
+    ts4 = resize2(get_data("ts4"), 1)
+    vs1 = resize2(get_data("vs1"), 1)
+    se = resize2(get_data("se"), 1)
+    cp = resize2(get_data("cp"), 1)
+    ce = resize2(get_data("ce"), 1)
+    data1 = [ts1, ts2, ts3, ts4, vs1, se, cp, ce]
+    col1 = ["ts1", "ts2", "ts3", "ts4", "vs1", "se", "cp", "ce"]
+
+    data = data100 + data10 + data1
+    arr = np.array(data).transpose((1, 0, 2))
+    with open("data_parsed/data", "wb") as f:
+        pickle.dump(arr, f)
+    return arr
+
+
+def get_profile_df() -> np.ndarray:
+    prof = get_data("profile")
+    # col = ["cooler condition", "valve condition", "internal pump leakage", "hydraulic accumulator", "stable flag"]
+    return prof
+
+
 def print_corr(run: int):
     df = get_dataframe(run)
     corr = df.corr()
@@ -200,12 +276,69 @@ def normalize(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def main():
-    df = get_dataframe(0)
-    df = df.interpolate()
+def pca():
+    data = get_data("data")
+    data = data.reshape((2205, 16 * 6000))
 
-    df = normalize(df)
-    print(df)
+    target = get_profile_df()
+    # target[:, 0] = target[:, 0] / 100
+    # target[:, 1] = target[:, 1] / 100
+    # target[:, 2] = target[:, 2] / 2
+    # target[:, 3] = target[:, 3] / 130
+
+    scaler = StandardScaler()
+    scaler.fit(data)
+    train_data_sc = scaler.transform(data)
+
+    componest = 1000
+
+    pca = PCA(n_components=componest)
+    train_data_pca = pca.fit_transform(train_data_sc)
+    pcaStd = np.std(train_data_pca)
+
+    model = models.Sequential()
+    layer = 1
+    units = 128
+
+    model.add(layers.Dense(units, input_dim=componest, activation='relu'))
+    model.add(layers.GaussianNoise(pcaStd))
+    for i in range(layer):
+        model.add(layers.Dense(units, activation='relu'))
+        model.add(layers.GaussianNoise(pcaStd))
+        model.add(layers.Dropout(0.1))
+    model.add(layers.Dense(5, activation='softmax'))
+
+    model.compile(loss='categorical_crossentropy', optimizer='rmsprop', metrics=['categorical_accuracy'])
+
+    model.fit(train_data_pca, target, epochs=100, batch_size=256, validation_split=0.15, verbose=2)
+
+
+def main():
+    # pca()
+
+    # get_dataframe2()
+
+    data = get_data("data")
+    # print(data)
+    target = get_profile_df()
+    target[:, 0] = target[:, 0] / 100
+    # target[:, 1] = target[:, 1] / 100
+    # target[:, 2] = target[:, 2] / 2
+    # target[:, 3] = target[:, 3] / 130
+    print(target[:, 0])
+    print(target.shape)
+
+    data = data.reshape((2205, 16 * 6000))
+    print(data.shape)
+    print(data)
+
+    network = models.Sequential()
+    network.add(layers.Dense(1024, activation="relu", input_shape=(16 * 6000,)))
+    # network.add(layers.Dense(512, activation="relu"))
+    # network.add(layers.Dropout(0.1))
+    network.add(layers.Dense(1, activation="relu"))
+    network.compile(optimizer="rmsprop", loss="categorical_crossentropy", metrics=["accuracy"])
+    network.fit(data, target[:, 0], epochs=5, batch_size=100)
 
 
 if __name__ == '__main__':

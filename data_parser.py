@@ -64,6 +64,10 @@ def main():
     with open("data_parsed/ce", "wb") as f:
         pickle.dump(ce, f)
 
+    profile = parse_file("data/profile.txt")
+    with open("data_parsed/profile", "wb") as f:
+        pickle.dump(profile, f)
+
 
 if __name__ == '__main__':
     main()
