@@ -6,6 +6,7 @@ import sys
 import pickle
 import seaborn as sns
 from sklearn.metrics import confusion_matrix
+from sklearn.linear_model import LinearRegression
 import matplotlib.pyplot as plt
 from matplotlib import animation
 import pandas
@@ -60,7 +61,8 @@ def get_data(mode=0) -> np.ndarray:
         cp = normalize(interpolate(np.loadtxt("data/CP.txt"), 10))
 
         # arr = np.array([ps1, ps2, ps3, ps5, ps6, ts1, ts2, ts3, ts4, fs1, fs2, eps1, se, ce, cp]).transpose((1, 0, 2))
-        arr = np.array([ps1, ps2, ps3, ps5, ps6]).transpose((1, 0, 2))
+        # arr = np.array([ps1, ps2, ps3, ps5, ps6]).transpose((1, 0, 2))
+        arr = np.array([fs1, fs2]).transpose((1, 0, 2))
         with open("data_parsed/yoloswag", "wb") as f:
             pickle.dump(arr, f)
         return arr
@@ -122,7 +124,7 @@ def get_target_hydraulic() -> np.ndarray:
     return arr
 
 
-def neaural():
+def neaural_pressure_valve():
     data = get_data(1)
     target = get_target_valve()
 
@@ -168,22 +170,77 @@ def neaural():
     plt.show()
 
 
-def update_hist(num, data):
-    plt.cla()
-    plt.plot(data[num, :])
+def neaural_flow_valve():
+    data = get_data(1)
+    target = get_target_valve()
+
+    p = np.random.permutation(data.shape[0])
+    data = data[p, :, :]
+    target = target[p, :]
+    print(data.shape)
+    train_data = data[200:-1, :, :]
+    test_data = data[0:200, :, :]
+
+    train_target = target[200:-1, :]
+    test_target = target[0:200, :]
+
+    train_data = train_data.reshape((train_data.shape[0], data.shape[1] * data.shape[2]))
+    test_data = test_data.reshape((test_data.shape[0], data.shape[1] * data.shape[2]))
+
+    network = models.Sequential()
+    network.add(layers.Dense(4096, activation="relu", input_shape=(data.shape[1] * data.shape[2],)))
+    # network.add(layers.Dropout(0.1))
+    # network.add(layers.Dense(2048, activation="relu"))
+    network.add(layers.Dense(target.shape[1], activation="softmax"))
+    network.compile(optimizer="rmsprop", loss="categorical_crossentropy", metrics=["accuracy"])
+    network.fit(train_data, train_target, epochs=30, batch_size=10)
+
+    test_loss, test_acc = network.evaluate(test_data, test_target)
+    print('test_acc: ', test_acc)
+
+    y_pred = network.predict_classes(test_data)
+
+    y_true = np.argmax(test_target, axis=1)
+    maitrix = confusion_matrix(y_true, y_pred)
+    labels = ['0', '1', '2', "3"]
+    print('maitrix: ', maitrix)
+
+    axis = plt.subplot()
+    sns.heatmap(maitrix, annot=True, ax=axis, square=True, fmt='g')
+
+    axis.set_xlabel('Predicted')
+    axis.set_ylabel('True')
+    axis.set_title('Confusion Matrix')
+    axis.xaxis.set_ticklabels(labels)
+    axis.yaxis.set_ticklabels(labels)
+    plt.show()
 
 
-def init():
-    plt.ylim([0, 100])
+def reg():
+    ps1 = normalize((np.loadtxt(f"data/FS1.txt")))
+
+    # tmp = np.zeros(ps1.shape)
+    # for run in range(ps1.shape[0]):
+    #     for i in range(ps1.shape[1] - 1):
+    #         tmp[run, i] = ps1[run, i + 1] - ps1[run, i]
+
+    # tmp = np.abs(tmp)
+    ps1 = ps1[:, 120:]
+    s = np.sum(ps1, axis=1)
+
+    tar = np.loadtxt("data/profile.txt")
+    tar = tar[:, 2]
+
+    # plt.scatter(tar, s)
+
+    tar = tar.reshape(1, -1)
+    s = s.reshape(1, -1)
+    lin_reg = LinearRegression()
+    lin_reg.fit(s, tar)
+    print(lin_reg.score(s, tar))
 
 
 if __name__ == '__main__':
-    neaural()
+    # neaural_flow_valve()
 
-    # yolo = np.loadtxt("data/PS2.txt")
-    # print(yolo.shape)
-    # fig = plt.figure()
-    # hist = plt.plot(yolo[0, :])
-    #
-    # animation = animation.FuncAnimation(fig, update_hist, yolo.shape[0], fargs=(yolo,), init_func=init)
-    # plt.show()
+    reg()
