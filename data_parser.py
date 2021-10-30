@@ -14,7 +14,7 @@ def get_data(filename: str):
     return ps
 
 
-def parse_file(filename: str) -> np.ndarray:
+def parse_file(filename: str, length=6000) -> np.ndarray:
     with open(filename) as f:
         data = f.read().strip()
 
