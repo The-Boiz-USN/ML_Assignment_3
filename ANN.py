@@ -63,6 +63,7 @@ def get_data(mode=0) -> np.ndarray:
         # arr = np.array([ps1, ps2, ps3, ps5, ps6, ts1, ts2, ts3, ts4, fs1, fs2, eps1, se, ce, cp]).transpose((1, 0, 2))
         # arr = np.array([ps1, ps2, ps3, ps5, ps6]).transpose((1, 0, 2))
         arr = np.array([fs1, fs2]).transpose((1, 0, 2))
+
         with open("data_parsed/yoloswag", "wb") as f:
             pickle.dump(arr, f)
         return arr
@@ -132,6 +133,7 @@ def neaural_pressure_valve():
     data = data[p, :, :]
     target = target[p, :]
     print(data.shape)
+
     train_data = data[200:-1, :, :]
     test_data = data[0:200, :, :]
 
@@ -144,10 +146,10 @@ def neaural_pressure_valve():
     network = models.Sequential()
     network.add(layers.Dense(2048, activation="relu", input_shape=(data.shape[1] * data.shape[2],)))
     # network.add(layers.Dropout(0.1))
-    # network.add(layers.Dense(8, activation="relu"))
+    # network.add(layers.Dense(1024, activation="relu"))
     network.add(layers.Dense(target.shape[1], activation="softmax"))
     network.compile(optimizer="rmsprop", loss="categorical_crossentropy", metrics=["accuracy"])
-    network.fit(train_data, train_target, epochs=30, batch_size=10)
+    network.fit(train_data, train_target, epochs=50, batch_size=10)
 
     test_loss, test_acc = network.evaluate(test_data, test_target)
     print('test_acc: ', test_acc)
@@ -188,12 +190,12 @@ def neaural_flow_valve():
     test_data = test_data.reshape((test_data.shape[0], data.shape[1] * data.shape[2]))
 
     network = models.Sequential()
-    network.add(layers.Dense(4096, activation="relu", input_shape=(data.shape[1] * data.shape[2],)))
+    network.add(layers.Dense(2048, activation="relu", input_shape=(data.shape[1] * data.shape[2],)))
     # network.add(layers.Dropout(0.1))
     # network.add(layers.Dense(2048, activation="relu"))
     network.add(layers.Dense(target.shape[1], activation="softmax"))
     network.compile(optimizer="rmsprop", loss="categorical_crossentropy", metrics=["accuracy"])
-    network.fit(train_data, train_target, epochs=30, batch_size=10)
+    network.fit(train_data, train_target, epochs=100, batch_size=10)
 
     test_loss, test_acc = network.evaluate(test_data, test_target)
     print('test_acc: ', test_acc)
@@ -216,31 +218,7 @@ def neaural_flow_valve():
     plt.show()
 
 
-def reg():
-    ps1 = normalize((np.loadtxt(f"data/FS1.txt")))
-
-    # tmp = np.zeros(ps1.shape)
-    # for run in range(ps1.shape[0]):
-    #     for i in range(ps1.shape[1] - 1):
-    #         tmp[run, i] = ps1[run, i + 1] - ps1[run, i]
-
-    # tmp = np.abs(tmp)
-    ps1 = ps1[:, 120:]
-    s = np.sum(ps1, axis=1)
-
-    tar = np.loadtxt("data/profile.txt")
-    tar = tar[:, 2]
-
-    # plt.scatter(tar, s)
-
-    tar = tar.reshape(1, -1)
-    s = s.reshape(1, -1)
-    lin_reg = LinearRegression()
-    lin_reg.fit(s, tar)
-    print(lin_reg.score(s, tar))
-
-
 if __name__ == '__main__':
-    # neaural_flow_valve()
+    neaural_flow_valve()
 
-    reg()
+    # reg()
